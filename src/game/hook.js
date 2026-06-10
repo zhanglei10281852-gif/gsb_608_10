@@ -100,26 +100,73 @@ export class Hook {
   }
 
   updateExtending(deltaTime, minerals) {
-    const hx = this.hookX;
-    const hy = this.hookY;
+    // Sweep the hook along the rope by 'extendSpeed * deltaTime' this tick.
+    // Use a segment-vs-circle check (instead of point-vs-circle at the new
+    // position) so fast hooks / small targets never tunnel through.
+    const oldLength = this.length;
+    const newLength = oldLength + HOOK.extendSpeed * deltaTime;
+    const sa = Math.sin(this.angle);
+    const ca = Math.cos(this.angle);
+    const x0 = this.anchorX + sa * oldLength;
+    const y0 = this.anchorY + ca * oldLength;
+    const x1 = this.anchorX + sa * newLength;
+    const y1 = this.anchorY + ca * newLength;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
 
-    for (const mineral of minerals) {
-      if (mineral.caught || mineral.removed) continue;
+    let firstHit = null;
+    let firstEntry = Infinity;
 
-      const dx = hx - mineral.x;
-      const dy = hy - mineral.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < mineral.radius + this.hookSize) {
-        this.caughtMineral = mineral;
-        mineral.caught = true;
-        this.state = HookState.RETRACTING;
-        return "caught";
+    if (segLen > 0) {
+      const ux = dx / segLen;
+      const uy = dy / segLen;
+      for (const mineral of minerals) {
+        if (mineral.caught || mineral.removed) continue;
+        const r = mineral.radius + this.hookSize;
+        const px = mineral.x - x0;
+        const py = mineral.y - y0;
+        const t = px * ux + py * uy; // projection along segment direction
+        const perpX = px - t * ux;
+        const perpY = py - t * uy;
+        const perp2 = perpX * perpX + perpY * perpY;
+        if (perp2 > r * r) continue; // ray never gets close enough
+        const back = Math.sqrt(r * r - perp2);
+        let entry = t - back;
+        if (entry > segLen) continue; // contact happens after this tick
+        if (entry < 0) entry = 0; // already overlapping at tick start
+        if (entry < firstEntry) {
+          firstEntry = entry;
+          firstHit = mineral;
+        }
+      }
+    } else {
+      // segLen == 0: fall back to point check at current position
+      for (const mineral of minerals) {
+        if (mineral.caught || mineral.removed) continue;
+        const ddx = x0 - mineral.x;
+        const ddy = y0 - mineral.y;
+        const r = mineral.radius + this.hookSize;
+        if (ddx * ddx + ddy * ddy <= r * r) {
+          firstHit = mineral;
+          firstEntry = 0;
+          break;
+        }
       }
     }
 
-    this.length += HOOK.extendSpeed * deltaTime;
+    if (firstHit) {
+      // Snap hook length to the contact point so the visual matches the catch.
+      this.length = oldLength + firstEntry;
+      this.caughtMineral = firstHit;
+      firstHit.caught = true;
+      this.state = HookState.RETRACTING;
+      return "caught";
+    }
 
+    this.length = newLength;
+    const hx = this.hookX;
+    const hy = this.hookY;
     if (hx < 0 || hx > CANVAS_WIDTH || hy > CANVAS_HEIGHT) {
       this.state = HookState.RETRACTING;
       return "miss";
@@ -132,7 +179,11 @@ export class Hook {
     let retractSpeed = HOOK.retractBaseSpeed * this.strengthBonus;
 
     if (this.caughtMineral) {
-      retractSpeed /= this.caughtMineral.weight * 0.08 + 0.5;
+      // Heavier loads must retract noticeably slower than light ones.
+      // Speed is inversely proportional to weight; very light items (e.g.
+      // diamonds, weight < 1) are clamped to the base speed so they don't
+      // come back faster than empty.
+      retractSpeed /= Math.max(1, this.caughtMineral.weight);
     }
 
     this.length -= retractSpeed * deltaTime;
