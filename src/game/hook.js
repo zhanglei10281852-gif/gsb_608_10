@@ -100,29 +100,36 @@ export class Hook {
   }
 
   updateExtending(deltaTime, minerals) {
-    const hx = this.hookX;
-    const hy = this.hookY;
+    const totalDistance = HOOK.extendSpeed * deltaTime;
+    const safeStep = 10;
+    const steps = Math.max(1, Math.ceil(totalDistance / safeStep));
+    const stepDistance = totalDistance / steps;
 
-    for (const mineral of minerals) {
-      if (mineral.caught || mineral.removed) continue;
+    for (let s = 0; s < steps; s++) {
+      this.length += stepDistance;
 
-      const dx = hx - mineral.x;
-      const dy = hy - mineral.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const hx = this.hookX;
+      const hy = this.hookY;
 
-      if (dist < mineral.radius + this.hookSize) {
-        this.caughtMineral = mineral;
-        mineral.caught = true;
-        this.state = HookState.RETRACTING;
-        return "caught";
+      for (const mineral of minerals) {
+        if (mineral.caught || mineral.removed) continue;
+
+        const dx = hx - mineral.x;
+        const dy = hy - mineral.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < mineral.radius + this.hookSize) {
+          this.caughtMineral = mineral;
+          mineral.caught = true;
+          this.state = HookState.RETRACTING;
+          return "caught";
+        }
       }
-    }
 
-    this.length += HOOK.extendSpeed * deltaTime;
-
-    if (hx < 0 || hx > CANVAS_WIDTH || hy > CANVAS_HEIGHT) {
-      this.state = HookState.RETRACTING;
-      return "miss";
+      if (hx < 0 || hx > CANVAS_WIDTH || hy > CANVAS_HEIGHT) {
+        this.state = HookState.RETRACTING;
+        return "miss";
+      }
     }
 
     return null;
@@ -132,7 +139,7 @@ export class Hook {
     let retractSpeed = HOOK.retractBaseSpeed * this.strengthBonus;
 
     if (this.caughtMineral) {
-      retractSpeed /= this.caughtMineral.weight * 0.08 + 0.5;
+      retractSpeed /= 1 + this.caughtMineral.weight * 0.08;
     }
 
     this.length -= retractSpeed * deltaTime;
