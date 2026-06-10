@@ -157,7 +157,7 @@ export class GameEngine {
   }
 
   checkLevelEnd() {
-    if (this.totalScore >= this.targetScore) {
+    if (this.score >= this.targetScore) {
       this.levelComplete();
     } else {
       this.gameOver();
@@ -182,6 +182,7 @@ export class GameEngine {
     if (this.totalScore < price) return false;
 
     this.score -= price;
+    this.totalScore -= price;
 
     switch (itemType) {
       case "dynamite":
