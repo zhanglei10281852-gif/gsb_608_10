@@ -287,7 +287,7 @@ export function generateMinerals(level, hasLuckyClover = false) {
       for (const mineral of minerals) {
         const dx = x - mineral.x;
         const dy = y - mineral.y;
-        const minDist = typeData.radius + 10;
+        const minDist = typeData.radius + mineral.radius;
         if (Math.sqrt(dx * dx + dy * dy) < minDist) {
           valid = false;
           break;
