@@ -100,25 +100,34 @@ export class Hook {
   }
 
   updateExtending(deltaTime, minerals) {
+    const prevX = this.hookX;
+    const prevY = this.hookY;
+
+    this.length += HOOK.extendSpeed * deltaTime;
+
     const hx = this.hookX;
     const hy = this.hookY;
 
     for (const mineral of minerals) {
       if (mineral.caught || mineral.removed) continue;
 
-      const dx = hx - mineral.x;
-      const dy = hy - mineral.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < mineral.radius + this.hookSize) {
+      if (
+        this.lineIntersectsCircle(
+          prevX,
+          prevY,
+          hx,
+          hy,
+          mineral.x,
+          mineral.y,
+          mineral.radius + this.hookSize,
+        )
+      ) {
         this.caughtMineral = mineral;
         mineral.caught = true;
         this.state = HookState.RETRACTING;
         return "caught";
       }
     }
-
-    this.length += HOOK.extendSpeed * deltaTime;
 
     if (hx < 0 || hx > CANVAS_WIDTH || hy > CANVAS_HEIGHT) {
       this.state = HookState.RETRACTING;
@@ -128,11 +137,40 @@ export class Hook {
     return null;
   }
 
+  lineIntersectsCircle(x1, y1, x2, y2, cx, cy, r) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const fx = x1 - cx;
+    const fy = y1 - cy;
+
+    const a = dx * dx + dy * dy;
+    const b = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - r * r;
+
+    let discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) {
+      return false;
+    }
+
+    discriminant = Math.sqrt(discriminant);
+    const t1 = (-b - discriminant) / (2 * a);
+    const t2 = (-b + discriminant) / (2 * a);
+
+    if (t1 >= 0 && t1 <= 1) {
+      return true;
+    }
+    if (t2 >= 0 && t2 <= 1) {
+      return true;
+    }
+
+    return false;
+  }
+
   updateRetracting(deltaTime) {
     let retractSpeed = HOOK.retractBaseSpeed * this.strengthBonus;
 
     if (this.caughtMineral) {
-      retractSpeed /= this.caughtMineral.weight * 0.08 + 0.5;
+      retractSpeed /= 1 + this.caughtMineral.weight;
     }
 
     this.length -= retractSpeed * deltaTime;
